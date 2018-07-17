@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Visualization</title>
+		<% include ../templates/includes/layout.html %>
+		<script src="https://d3js.org/d3.v5.min.js"></script>
+		<style>
+			* {
+				box-sizing: border-box;
+			}
+
+			/* Create two unequal columns that floats next to each other */
+			.column {
+				float: left;
+				padding: 10px;
+			}
+
+			.left {
+				width: 75%;
+			}
+
+			.right {
+				width: 25%;
+			}
+
+			/* Clear floats after the columns */
+			.row:after {
+				content: "";
+				display: table;
+				clear: both;
+			}
+		</style>
+	</head>
+	<body>
+		<div class='container'>
+			<h1 align="center">European Imports & Exports of <br> Fish/Crustaceans Through 2000-2015</h1>
+			<br>
+			<p>
+				Choose your desired country & commodity, then hit the "Render Visualization" button!
+				<br>
+			</p>
+			Country:
+			<select id="country_selected">
+				<% for(var i = 0; i < europe_countries.length; i++) { %>
+					<option value="<%- europe_countries[i] %>"><%- europe_countries[i] %></option>
+				<% } %>
+			</select>
+			<br>
+			Commodity:
+			<select id="food_selected">
+				<option value="Fish">Fish</option>
+				<option value="Crustaceans">Crustaceans</option>
+			</select>
+			<br>
+			<br>
+			<script>
+				var orderOfMagnitude = function(x) {
+					return Math.floor(Math.log10(x));
+				};
+
+				var renderAnnotationsLegend = function(plot_imports=true, plot_exports=true) {
+					document.getElementById("annotationsLegend").innerHTML = "";
+
+					var annotationsLegend = d3.select("#annotationsLegend").append("svg").attr("width", 200).attr("height", 100);
+
+					annotationsLegend = annotationsLegend.append("g").attr("transform", "translate(" + 7 + "," + 5 + ")");
+
+					// append max import/export squares labels
+					annotationsLegend.selectAll('rect')
+							.data(["blue", "red"])
+							.enter().append("rect")
+							.attr("x", 0)
+							.attr("y", function(d, i){ return i*20;})
+							.attr("width", 10)
+							.attr("height", 10)
+							.style("fill", function(d, i) { return d; })
+							.style("fill-opacity", 0)
+							.style("stroke-width", 1)
+							.style("stroke", function(d, i) { return d; });
+
+					annotationsLegend.selectAll('text')
+						.data([": Max Imports", ": Max Exports"])
+						.enter().append('text')
+							.attr("x", 0 + 15)
+							.attr("y", function(d, i){ return i*20 + 10;})
+							.text(function(d, i) { return d });
+
+					// append max gain/loss lines labels
+					annotationsLegend.selectAll('line')
+							.data(["rgb(0,128,0)", "rgb(128,0,128)"])
+							.enter().append("line")
+							.attr("x1", -5)
+							.attr("x2", 10)
+							.attr("y1", function(d, i) { return i*20 + 45; } )
+							.attr("y2", function(d, i) { return i*20 + 45; } )
+							.style("stroke-width", 4)
+							.style("stroke", function(d,i) { return d; } )
+							.style("stroke-dasharray", "3,3");
+
+					annotationsLegend.selectAll('.dashed-line-annotations')
+						.data([": Max Net Gain", ": Max Net Loss"])
+						.enter().append('text')
+							.attr("x", 0 + 15)
+							.attr("y", function(d, i){ return i*20 + 50;})
+							.text(function(d, i) { return d });
+
+				};
+
+				var renderLegend = function() {
+					document.getElementById("legend").innerHTML = "";
+
+					var legend = d3.select("#legend").append("svg").attr("width", 100).attr("height", 70);
+
+					// add legend title
+					legend.append("text")
+						.attr("x", 5)
+						//.attr("y", 0 - 0.35*margin.top)
+						.attr("y", 20)
+						.attr("text-anchor", "front")
+						.style("font-size", "16px")
+						.style("text-decoration", "underline")
+						.text("Legend:");
+
+					legend = legend.append("g").attr("transform", "translate(" + 7 + "," + 30 + ")");
+
+					legend.selectAll('rect')
+							.data(["blue", "red"])
+							.enter().append("rect")
+							.attr("x", 0)
+							.attr("y", function(d, i){ return i*20;})
+							.attr("id", function(d, i){ return d + "Legend"; })
+							.attr("width", 10)
+							.attr("height", 10)
+							.style("fill", function(d, i) { return d; });
+
+					legend.selectAll('text')
+						.data(["Imports", "Exports"])
+						.enter().append('text')
+							.attr("x", 0 + 15)
+							.attr("y", function(d, i){ return i*20 + 10;})
+							.attr("id", function(d, i){ return d + "Legend2"; })
+							.text(function(d, i) { return ": "; });
+
+					legend.selectAll('span')
+						.data(["Imports", "Exports"])
+						.enter().append('text')
+							.attr("x", 0 + 25)
+							.attr("y", function(d, i){ return i*20 + 11;})
+							.attr("id", function(d, i){ return d + "Legend3"; })
+							.text(function(d, i) { return d; });
+
+					var importsLegend1 = d3.select("#blueLegend");
+					var importsLegend2 = d3.select("#ImportsLegend2");
+					var importsLegend3 = d3.select("#ImportsLegend3");
+
+					var exportsLegend1 = d3.select("#redLegend");
+					var exportsLegend2 = d3.select("#ExportsLegend2");
+					var exportsLegend3 = d3.select("#ExportsLegend3");
+
+					importsLegend3.on("mouseover", function() {
+							importsLegend3.attr("opacity", 0.50);
+							d3.select(this).style("cursor", "pointer");
+						}).on("mouseout", function() {
+							importsLegend3.attr("opacity", 1);
+						}).on("click", function() {
+							if ((importsLegend3.style("display") == "block") && (exportsLegend3.style("display") == "block")) {
+								exportsLegend1.style("display", "none");
+								exportsLegend2.style("display", "none");
+								exportsLegend3.style("display", "none");
+
+								importsLegend3.style("fill", "rgb(119,136,153)");
+
+								renderViz(document.getElementById("country_selected").value, document.getElementById("food_selected").value, true, false, false);
+							}
+							else {
+								exportsLegend1.style("display", "block");
+								exportsLegend2.style("display", "block");
+								exportsLegend3.style("display", "block");
+
+								importsLegend3.style("fill", "rgb(0,0,0)");
+
+								renderViz(document.getElementById("country_selected").value, document.getElementById("food_selected").value, true, true, false);
+							}
+						});
+
+					exportsLegend3.on("mouseover", function() {
+							exportsLegend3.attr("opacity", 0.50);
+							d3.select(this).style("cursor", "pointer");
+						}).on("mouseout", function() {
+							exportsLegend3.attr("opacity", 1);
+						}).on("click", function() {
+							if ((importsLegend3.style("display") == "block") && (exportsLegend3.style("display") == "block")) {
+								importsLegend1.style("display", "none");
+								importsLegend2.style("display", "none");
+								importsLegend3.style("display", "none");
+
+								exportsLegend3.style("fill", "rgb(119,136,153)");
+
+								renderViz(document.getElementById("country_selected").value, document.getElementById("food_selected").value, false, true, false);
+							}
+							else {
+								importsLegend1.style("display", "block");
+								importsLegend2.style("display", "block");
+								importsLegend3.style("display", "block");
+
+								exportsLegend3.style("fill", "rgb(0,0,0)");
+
+								renderViz(document.getElementById("country_selected").value, document.getElementById("food_selected").value, true, true, false);
+							}
+						});
+				};
+
+				var renderViz = function(country, food, plot_imports=true, plot_exports=true, plot_legend=true) {
+
+					document.getElementById('viz').innerHTML = "";
+
+					// create svg canvas
+					// default values:
+					// width = 960
+					// height = 500
+					// margin.right = 20
+					// margin.top = 20
+					var myViz = d3.select("#viz").append("svg").attr("width", 1040).attr("height", 520),
+						margin = {top: 40, right: 100, bottom: 30, left: 50},
+						width = +myViz.attr("width") - margin.left - margin.right,
+						height = +myViz.attr("height") - margin.top - margin.bottom;
+					
+					d3.select("#viz").append("div")
+							.attr("id", "tooltipBox")
+							.style("position", "absolute")
+							.style("background-color", "lightgray")
+							.style("padding", 5)
+							.style("display", "none");
+
+					myViz = myViz.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+					var focus = myViz.append("g").style("display", "none");
+					var tooltipLine = myViz.append("line").attr("id", "tooltipLine");
+					var tooltipBox = d3.select("#tooltipBox");
+
+					var parseTime = d3.timeParse("%Y");
+					bisectDate = d3.bisector(function(d) { return d["Year"]; }).left;
+
+					years = [parseTime(2000), parseTime(2001), parseTime(2002), parseTime(2003), parseTime(2004), parseTime(2005), parseTime(2006), parseTime(2007), parseTime(2008), parseTime(2009), parseTime(2010), parseTime(2011), parseTime(2012), parseTime(2013), parseTime(2014), parseTime(2015)];
+
+					var x = d3.scaleTime()
+						.domain(years)
+						.range([0, width]);
+
+					var y = d3.scaleLinear()
+						.rangeRound([height, 0]);
+
+					var line_imports = d3.line()
+						.x(function(d) { return x(d["Year"]); })
+						.y(function(d) { return y(d["Imports"]); });
+
+					var line_exports = d3.line()
+						.x(function(d) { return x(d["Year"]); })
+						.y(function(d) { return y(d["Exports"]); });
+
+					d3.csv(country + "_Quantity_" + food + ".csv").then(function(data) {
+						data.forEach(function(d, i) {
+							d["Year"] = parseTime(d["Year"]);
+							d["Imports"] = +d["Imports"];
+							d["Exports"] = +d["Exports"];
+						});
+
+						var max_imports = plot_imports ? d3.max(data, function(d) { return d["Imports"]; }) : -Math.pow(10, 1000);
+						var max_exports = plot_exports ? d3.max(data, function(d) { return d["Exports"]; }) : -Math.pow(10, 1000);
+						var overall_max = Math.max(max_imports, max_exports);
+
+						var max_y_domain = Math.pow(10, orderOfMagnitude(overall_max))*Math.ceil(overall_max/Math.pow(10, orderOfMagnitude(overall_max)));
+
+						// set x-y axis domain parameters for imports data
+						x.domain(d3.extent(data, function(d) { return d["Year"]; }));
+						y.domain([0, max_y_domain]);
+
+						if (plot_imports) {
+							// Add the imports path
+							myViz.append("path")
+								.data([data])
+								.attr("class", "line")
+								.attr("fill", "none")
+								.attr("stroke", "blue")
+								.attr("d", line_imports);
+
+							// append the imports circle at the intersection 
+							focus.append("circle")
+								.attr("class", "y")
+								.attr("id", "importsCircle")
+								.style("fill", "blue")
+								.attr("r", 4);
+
+							// append max imports square
+							myViz.selectAll('.max_import_rect')
+								.data(data)
+								.enter().append("rect")
+									.style("opacity", function(d, i) {
+										if (d["Imports"] == max_imports)
+											return 1;
+										else
+											return 0;
+									})
+									.style("fill-opacity", 0)
+									.style("stroke-width", 1)
+									.style("stroke", "rgb(0,0,255)")
+									.attr("width", 10)
+									.attr("height", 10)
+									.attr("x", function(d, i) {
+										return x(d["Year"]) - 5;
+									})
+									.attr("y", function(d, i) {
+										return y(d["Imports"]) - 5;
+									});
+						}
+
+						if (plot_exports) {
+							// Add the exports path.
+							myViz.append("path")
+								.data([data])
+								.attr("class", "line")
+								.attr("fill", "none")
+								.attr("stroke", "red")
+								.attr("d", line_exports);
+
+							// append the exports circle at the intersection 
+							focus.append("circle")
+								.attr("class", "y")
+								.attr("id", "exportsCircle")
+								.style("fill", "red")
+								.attr("r", 4);
+
+							// append max exports square
+							myViz.selectAll('.max_export_rect')
+								.data(data)
+								.enter().append("rect")
+									.style("opacity", function(d, i) {
+										if (d["Exports"] == max_exports)
+											return 1;
+										else
+											return 0;
+									})
+									.style("fill-opacity", 0)
+									.style("stroke-width", 1)
+									.style("stroke", "rgb(255,0,0)")
+									.attr("width", 10)
+									.attr("height", 10)
+									.attr("x", function(d, i) {
+										return x(d["Year"]) - 5;
+									})
+									.attr("y", function(d, i) {
+										return y(d["Exports"]) - 5;
+									});
+						}
+
+						// append max gain and max loss lines if possible
+						if (plot_imports && plot_exports) {
+
+							var max_profit = d3.max(data, function(d) { return d["Imports"] - d["Exports"]; } );
+
+							// append max gain line
+							myViz.selectAll('.max_profit_line')
+								.data(data)
+								.enter().append("line")
+									.style("opacity", function(d, i) {
+										if (((d["Imports"] - d["Exports"]) == max_profit) && (d["Imports"] > d["Exports"]) && (max_profit != 0))
+											return 1;
+										else
+											return 0;
+									})
+									.style("stroke-width", 4)
+									.style("stroke", "rgb(0,128,0)")
+									.style("stroke-dasharray", "3,3")
+									.attr("x1", function(d, i) {
+										return x(d["Year"]);
+									})
+									.attr("x2", function(d, i) {
+										return x(d["Year"]);
+									})
+									//.attr("y1", function(d) { return y(d["Exports"]); } )
+									//.attr("y2", function(d) { return y(d["Imports"]); } );
+									.attr("y1", 0)
+									.attr("y2", height);
+
+							var max_loss = d3.max(data, function(d) { return d["Exports"] - d["Imports"]; } );
+
+							// append max loss line
+							myViz.selectAll('.max_loss_line')
+								.data(data)
+								.enter().append("line")
+									.style("opacity", function(d, i) {
+										if (((d["Exports"] - d["Imports"]) == max_loss) && (d["Exports"] > d["Imports"]) && (max_loss != 0))
+											return 1;
+										else
+											return 0;
+									})
+									.style("stroke-width", 4)
+									.style("stroke", "rgb(128,0,128)")
+									.style("stroke-dasharray", "3,3")
+									.attr("x1", function(d, i) {
+										return x(d["Year"]);
+									})
+									.attr("x2", function(d, i) {
+										return x(d["Year"]);
+									})
+									//.attr("y1", function(d) { return y(d["Exports"]); } )
+									//.attr("y2", function(d) { return y(d["Imports"]); } );
+									.attr("y1", 0)
+									.attr("y2", height);
+						}
+
+						// Add the X Axis
+						myViz.append("g")
+							.attr("transform", "translate(0," + height + ")")
+							.call(d3.axisBottom(x).tickValues(years))
+							.append("text")
+								.attr("fill", "#000")
+								.attr("x", width - 5)
+								.attr("y", -16)
+								.style("font-size", "12px")
+								.attr("dy", "0.71em")
+								.attr("text-anchor", "end")
+								.text("Year");
+
+						// Add the Y Axis
+						yAxis = d3.axisLeft(y)
+									.tickSizeInner(5)
+									.tickSizeOuter(5);
+						myViz.append('g')
+							.classed('y axis', true)
+							.call(yAxis)
+							.append("text")
+								.attr("fill", "#000")
+								.attr("transform", "rotate(-90)")
+								.attr("y", 6)
+								.style("font-size", "12px")
+								.attr("dy", "0.71em")
+								.attr("text-anchor", "end")
+								.text("Quantity (tons)");
+
+						// add title to plot
+						myViz.append("text")
+							.attr("id", "chartTitle")
+							.attr("x", (width / 2))
+							.attr("y", -25)
+							.attr("text-anchor", "middle")
+							.style("font-size", "16px")
+							.style("text-decoration", "underline")
+							.text("Imports/Exports of " + food + " in " + country);
+
+						// append the rectangle to capture mouse
+						myViz.append("rect")
+							.attr("id", "focusRect")
+							.attr("width", width)
+							.attr("height", height)
+							.style("fill", "none")
+							.style("pointer-events", "all")
+							.on("mouseover", function() { 
+								focus.style("display", null);
+								tooltipLine.style("opacity", 1);
+								tooltipBox.style("display", "block");
+							})
+							.on("mouseout", function() { 
+								focus.style("display", "none"); 
+								tooltipLine.style("opacity", 0);
+								tooltipBox.style("display", "none");
+							})
+							.on("mousemove", mousemove);
+						
+						function mousemove() {
+							var x0 = x.invert(d3.mouse(this)[0]),
+								i = bisectDate(data, x0, 1),
+								d0 = data[i - 1],
+								d1 = data[i],
+								d = x0 - d0["Year"] > d1["Year"] - x0 ? d1 : d0;
+
+							var curr_data = [[d["Imports"], "blue"], [d["Exports"], "red"]];
+
+							if ((d["Imports"] - d["Exports"]) != 0) {
+								if ((d["Imports"] - d["Exports"]) > 0) // net gain
+									curr_data.push([d["Imports"] - d["Exports"], "rgb(0,128,0)"]);
+								else // net loss
+									curr_data.push([d["Exports"] - d["Imports"], "rgb(128,0,128)"]);
+							}
+
+							// render tooltip line
+							tooltipLine
+								.style("opacity", 1)
+								.style("stroke", "black")
+								.attr("x1", x(d["Year"]))
+								.attr("x2", x(d["Year"]))
+								.attr("y1", 0)
+								.attr("y2", height);
+
+							// render tooltip box
+							tooltipBox.html("")
+								.style('left', (d3.event.pageX + 20) + 'px')
+								.style('top', (d3.event.pageY - 20) + 'px');
+
+							tooltipBox.append("u").html(JSON.stringify(d["Year"]).split('"')[1].split("-")[0]);
+							tooltipBox.append("text").html(": ");
+
+							if (plot_imports && plot_exports) {
+								tooltipBox.selectAll()
+									.data(curr_data).enter().append("div")
+										.style("color", function(d) {
+											return d[1];
+										})
+										.html(function(d, i) {
+											if (i == 0)
+												return "Imports: " + Number(d[0]).toLocaleString();
+											else if (i == 1)
+												return "Exports: " + Number(d[0]).toLocaleString();
+											else {
+												if (d[1] == "rgb(0,128,0)")
+													return "Net Gain: " + Number(d[0]).toLocaleString();
+												else
+													return "Net Loss: " + Number(d[0]).toLocaleString();
+											}
+										});
+							} else if (plot_imports) {
+								tooltipBox.selectAll()
+									.data([curr_data[0]]).enter().append("div")
+										.style("color", function(d) { return d[1]; } )
+										.html(function(d) { return "Imports: " + Number(d[0]).toLocaleString(); });
+							} else { // plot_exports
+								tooltipBox.selectAll()
+									.data([curr_data[1]]).enter().append("div")
+										.style("color", function(d) { return d[1]; } )
+										.html(function(d) { return "Exports: " + Number(d[0]).toLocaleString(); });
+							}
+
+							focus.select("#importsCircle")
+								.attr("transform", "translate(" + x(d["Year"]) + "," + y(d["Imports"]) + ")");
+
+							focus.select("#exportsCircle")
+								.attr("transform", "translate(" + x(d["Year"]) + "," + y(d["Exports"]) + ")");
+						};
+
+						if (plot_legend)
+							renderLegend();
+							renderAnnotationsLegend();
+					});
+				};
+			</script>
+			<button onClick='renderViz(document.getElementById("country_selected").value, document.getElementById("food_selected").value, true, true)'>Render Visualization</button>
+			<br>
+			<br>
+			<div class="row">
+				<div id="legend" class="column left"></div>
+				<div id="annotationsLegend" class="column right"></div>
+			</div>
+			<div id="viz"></div>
+		</div>
+	</body>
+</html>
